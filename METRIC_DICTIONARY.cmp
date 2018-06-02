@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>
+<PROCEDURE_DEFINITION>
+<DESCRIPTION/>
+<CODE>//list all metrics in the project    &#13;
+java.sql.Connection conn = null;&#13;
+java.sql.Statement stmt = null;&#13;
+java.sql.PreparedStatement pstmt= null;&#13;
+java.sql.PreparedStatement createPstmt= null;&#13;
+&#13;
+&#13;
+&#13;
+int emptymetricList = 0;String resultMesssage = null;//This reult string will hold the final result message used in the finally clause&#13;
+&#13;
+try&#13;
+{&#13;
+                //Create an ODBC connection using a DSN&#13;
+  	  Class.forName( "sun.jdbc.odbc.JdbcOdbcDriver" );&#13;
+	conn = java.sql.DriverManager.getConnection( "jdbc:odbc:Driver={Microsoft Excel Driver (*.xls)};DBQ="+sExcelPath+" ;readOnly= false");&#13;
+	stmt = conn.createStatement();&#13;
+	&#13;
+	//Creare a String to store the command manager script&#13;
+	String sQuery = "LIST ALL METRICS IN FOLDER \"" + sFolderName + "\" FOR PROJECT \"" + sProjectName + "\";";&#13;
+	//Create a Reuslt set object to store the result of the query&#13;
+	ResultSet metricList = executeCapture(sQuery);&#13;
+	//if no metrics  is found, return&#13;
+	if(metricList == null || metricList.getRowCount() == 0){&#13;
+		printErr("No Objects is found in '" +sFolderName + "'");&#13;
+		emptymetricList = 1;&#13;
+		return;&#13;
+	}&#13;
+	else&#13;
+	{&#13;
+	int rowCnt = metricList.getRowCount();&#13;
+	int colCnt = metricList.getColumnCount();&#13;
+	int rNum =0;int cNum=0; int counter=0;&#13;
+	String[][] metricArray = new String[rowCnt] [colCnt];//Create an array with the size of the result set&#13;
+	String[][] propertySetArray = new String[rowCnt] [14];//Create an array with the size of the result set&#13;
+	metricList.moveFirst();&#13;
+	while(!metricList.isEof()){&#13;
+&#13;
+		//get properties for each metric&#13;
+		String metricName = metricList.getFieldValueString(DisplayPropertyEnum.NAME);&#13;
+		String sPropertyQuery = "LIST ALL PROPERTIES FOR METRIC  \"" + metricName +"\"   IN FOLDER \"" + sFolderName + "\" FOR PROJECT \"" + sProjectName + "\";";&#13;
+		ResultSet propertiesSet = executeCapture(sPropertyQuery);&#13;
+		//move the metric property set(name, path and hidden) into an array&#13;
+			for (cNum=0;cNum &lt; colCnt; cNum++)		&#13;
+			{&#13;
+				metricArray [counter][cNum] = metricList.getResultCell (cNum).getValueString();&#13;
+				&#13;
+			&#13;
+			} &#13;
+		//Move the property set into an array&#13;
+		propertiesSet.moveFirst();		&#13;
+		int metricPropertyCol =0;&#13;
+			for (metricPropertyCol=0;metricPropertyCol &lt; 14; metricPropertyCol++)&#13;
+			{&#13;
+			propertySetArray [counter][metricPropertyCol] = propertiesSet.getResultCell (metricPropertyCol).getValueString();	&#13;
+			}&#13;
+	                  	metricList.moveNext();&#13;
+		counter=counter+1;&#13;
+		}&#13;
+	&#13;
+	//We need to create a sheet in the Excel. This sheet is considered as a table by ODBC.&#13;
+&#13;
+			String crtTable ="CREATE TABLE "+sDictionaryName+" ("&#13;
+				+ "METRIC_NAME TEXT, "&#13;
+				+ "PATH TEXT, "&#13;
+				+ "HIDDEN TEXT, "&#13;
+				+ "ID TEXT, "&#13;
+				+ "DESCRIPTION TEXT, "&#13;
+				+ "CREATION_TIME TEXT, "&#13;
+				+ "MODIFICATION_TIME TEXT, "	&#13;
+				+ "OWNER TEXT, "&#13;
+				+ "FORMULA TEXT, "&#13;
+				+ "CONDITION TEXT, "&#13;
+				+ "EXPRESSION  TEXT, "&#13;
+				+ "SMART_METRIC TEXT "&#13;
+				+ ");";&#13;
+&#13;
+		stmt.executeUpdate(crtTable);  &#13;
+&#13;
+		//After Creating table, we need to insert rows from the array of strings.&#13;
+		for (rNum=0;rNum &lt; rowCnt; rNum++)    {	&#13;
+&#13;
+	           	&#13;
+		String insQuery = "INSERT INTO " +sDictionaryName+"  VALUES (?,?,?,?,?,?,?,?,?,?,?,?);";&#13;
+		pstmt = conn.prepareStatement(insQuery);&#13;
+		pstmt.setString(1,metricArray [rNum][0]);	&#13;
+		pstmt.setString(2,metricArray [rNum][1]);	&#13;
+		pstmt.setString(3,metricArray [rNum][2]);&#13;
+		pstmt.setString(4, propertySetArray [rNum][1]);&#13;
+		pstmt.setString(5, propertySetArray [rNum][2]);&#13;
+		pstmt.setString(6, propertySetArray [rNum][3]);&#13;
+		pstmt.setString(7, propertySetArray [rNum][4]);&#13;
+		pstmt.setString(8, propertySetArray [rNum][5]);&#13;
+		pstmt.setString(9, propertySetArray [rNum][7]);&#13;
+		pstmt.setString(10, propertySetArray [rNum][9]);&#13;
+		pstmt.setString(11, propertySetArray [rNum][11]);&#13;
+		pstmt.setString(12, propertySetArray [rNum][12]);&#13;
+		pstmt.executeUpdate();	&#13;
+	&#13;
+                  	         	}&#13;
+            	}&#13;
+}&#13;
+&#13;
+&#13;
+&#13;
+catch (java.lang.Exception e){&#13;
+	  printOut("Exception caught:"+e.getMessage());&#13;
+	    &#13;
+	    StackTraceElement[] trace =e.getStackTrace();&#13;
+&#13;
+       	 	for (int i=0; i &lt; trace.length; i++)&#13;
+          		 printOut("\tat " + trace[i]);&#13;
+	&#13;
+	printOut(""+e.getCause());&#13;
+	resultMesssage = e.getMessage();&#13;
+}&#13;
+&#13;
+&#13;
+finally{&#13;
+	stmt.close();           &#13;
+	conn.commit();&#13;
+	conn.close();&#13;
+	if(resultMesssage == null &amp;&amp; emptymetricList == 0)&#13;
+		{&#13;
+		printOut("Metric Dictionary Created Successfully");		&#13;
+		}&#13;
+	else&#13;
+		{&#13;
+		printOut("Metric Dictionary Creation Unsuccessful due to" +resultMesssage);&#13;
+		}&#13;
+}&#13;
+&#13;
+</CODE>
+<SAMPLE/>
+<VERSION>1.0</VERSION>
+<TYPE>CUSTOM</TYPE>
+<INPUT_PARAMS>
+<INPUT INPUT_TYPE="STRING">sProjectName</INPUT>
+<INPUT INPUT_TYPE="STRING">sFolderName</INPUT>
+<INPUT INPUT_TYPE="STRING">sDictionaryName</INPUT>
+<INPUT INPUT_TYPE="STRING">sExcelPath</INPUT>
+</INPUT_PARAMS>
+<CLASSPATH/>
+<TEST_INPUT>
+<TEST_INPUT_PARAM/>
+<TEST_INPUT_PARAM/>
+<TEST_INPUT_PARAM/>
+<TEST_INPUT_PARAM/>
+</TEST_INPUT>
+<TEST_CONNECTION_INFO>
+<TEST_PSN_NAME>MicroStrategy Analytics Modules</TEST_PSN_NAME>
+<TEST_USERNAME>Jean</TEST_USERNAME>
+<TEST_PASSWORD>0000000024d5378f50d5f4eb93a5c6de9f644cf07f33bf3a36435eeb93b7311d32f7c55dd1c537b0b4fc4c77d5b77ded</TEST_PASSWORD>
+</TEST_CONNECTION_INFO>
+</PROCEDURE_DEFINITION>
